@@ -311,6 +311,15 @@ def run_bounded(argv, cwd, limits):
         # their return code and no stop reason.
         if peak_memory >= limits["memory_mb"] * 1024 * 1024: reason = "MEMORY_LIMIT"
         elif peak_cpu >= limits["cpu_seconds"]: reason = "CPU_LIMIT"
+    if reason is None and proc.returncode not in (0, None):
+        # On POSIX, an address-space rlimit may make Python raise MemoryError
+        # and exit before /proc can report a final RSS sample.
+        try:
+            diagnostic = stderr_path.read_text(encoding="utf-8", errors="replace").lower()
+            if "memoryerror" in diagnostic or "cannot allocate memory" in diagnostic:
+                reason = "MEMORY_LIMIT"
+        except OSError:
+            pass
     return {"returncode": proc.returncode, "stop_reason": reason,
             "elapsed_seconds": elapsed, "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path), "platform": platform.platform(),

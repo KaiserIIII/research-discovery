@@ -210,8 +210,13 @@ def _safe_args(adapter: str, args: list[str], output_dir: Path) -> list[str]:
     if adapter == "planner":
         if len(args) not in {1, 3} or args[0].startswith("-") or (len(args) == 3 and args[1] != "--output"):
             raise DiscoveryError("planner requires OPTIONS FILE with optional --output FILE")
-        if len(args) == 3 and not (Path(args[2]) if Path(args[2]).is_absolute() else output_dir / args[2]).resolve().is_relative_to(output_dir.resolve()):
-            raise DiscoveryError("planner output must remain under output_dir")
+        if len(args) == 3:
+            # Normalize both Windows and POSIX separators before resolving so
+            # a Windows-style traversal is rejected on Linux CI as well.
+            raw = args[2].replace("\\", "/")
+            candidate = Path(raw) if Path(raw).is_absolute() else output_dir / raw
+            if not candidate.resolve().is_relative_to(output_dir.resolve()):
+                raise DiscoveryError("planner output must remain under output_dir")
         return ["plan", *args]
     if adapter == "research_state":
         if args:
