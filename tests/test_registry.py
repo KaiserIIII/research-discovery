@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rd.core import DiscoveryError
-from rd.registry import discover, invoke_v41, runtime_capabilities
+from rd.registry import discover, invoke_v41, runtime_capabilities, route_capability
 
 
 class RegistryTests(unittest.TestCase):
@@ -85,6 +85,15 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(rows['text_delta'], 'VERIFIED_EXECUTABLE')
         self.assertEqual(rows['storm'], 'DESIGN_REFERENCE')
         self.assertEqual(rows['v41_read_only_adapters'], 'AVAILABLE_UNTESTED')
+
+    def test_best_qualified_provider_respects_permissions_and_verification(self):
+        providers = [
+            {'provider_id': 'host', 'availability': 'HOST_WORKFLOW', 'capabilities': ['frontier'], 'permissions': [], 'network': True},
+            {'provider_id': 'pilot', 'availability': 'VERIFIED_EXECUTABLE', 'capabilities': ['frontier'], 'permissions': ['local_read'], 'network': False},
+        ]
+        result = route_capability('frontier', providers, permissions={'local_read'})
+        self.assertEqual(result['status'], 'PASS')
+        self.assertEqual(result['provider']['provider_id'], 'pilot')
 
 
 if __name__ == '__main__':

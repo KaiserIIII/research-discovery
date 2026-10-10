@@ -8,10 +8,12 @@ import urllib.parse
 from pathlib import Path
 from .core import DiscoveryError, Project, contained, digest, read_json, sha, write_json
 from .registry import invoke_v41
+from .evaluation import compare_runs
 
 FILES = ('discovery_manifest.json','hypotheses.json','prior_art_matrix.md','pilot_protocol.json',
          'pilot_results.json','evidence_index.json','rival_explanations.md','limitations.md',
          'discovery_dossier.md','handoff_to_v4_1.md')
+OPTIONAL_FILES = ('knowledge_graph.json', 'static_analysis_results.json', 'evaluation_report.json')
 PORTABLE_EVIDENCE_LIMIT = 4 * 1024 * 1024
 
 def _safe_text(value):
@@ -58,7 +60,7 @@ def export_dossier(project: Project, output: Path):
             item.update(portable=False,portability_status='INCOMPLETE',portability_reason=str(exc))
         index[evidence_id]=item
         portability.append({'evidence_id':evidence_id,'portable':item['portable'],'status':item['portability_status']})
-    manifest=dict(schema_version='1.0',skill_version='1.0.1',project_schema='1.0',
+    manifest=dict(schema_version='1.0',skill_version='2.0.0-candidate',project_schema='1.0',
                   exported_utc=project.manifest['created_utc'],domain=project.manifest['domain'],
                   stage_labels=['DISCOVERY','PILOT','EXPLORATORY_POST_HOC'],
                   scientific_status='EXPLORATORY_HANDOFF_REQUIRES_V4_1_REVIEW',
@@ -77,6 +79,15 @@ def export_dossier(project: Project, output: Path):
       'pilot_results.json':pilot_events,
       'evidence_index.json':index,
     }
+    graph_snapshot = next((e['payload'] for e in reversed(events)
+                           if e['kind'] == 'snapshot' and e['payload'].get('kind') == 'knowledge_graph'), None)
+    if graph_snapshot:
+        payloads['knowledge_graph.json'] = read_json(contained(project.root, graph_snapshot['path']))
+    static_events = [e['payload'] for e in events if e['kind'] in {'static_analysis_registered', 'static_analysis_result'}]
+    if static_events:
+        payloads['static_analysis_results.json'] = static_events
+    if any(e['kind'] == 'evaluation_run' for e in events):
+        payloads['evaluation_report.json'] = compare_runs(project)
     for name,value in payloads.items(): write_json(output/name,value)
     matrix=['# Prior-art matrix','', '| Claim | Relation | Source | Exact region | Objection | Unresolved |','|---|---|---|---|---|---|']
     for item in prior:
@@ -107,7 +118,8 @@ def export_dossier(project: Project, output: Path):
     # A manifest cannot contain its own hash without recursive self-reference;
     # its journal/project source remains the integrity root. All payload files
     # are content-addressed here.
-    hashes={name:sha(output/name) for name in FILES if name!='discovery_manifest.json'}
+    hashes={name:sha(output/name) for name in (*FILES, *OPTIONAL_FILES)
+            if name!='discovery_manifest.json' and (output/name).is_file()}
     manifest['files']=hashes; write_json(output/'discovery_manifest.json',manifest)
     return dict(status='PASS',output=str(output),files=hashes,candidates=len(hypotheses),pilots=len(pilot_events))
 
@@ -116,11 +128,27 @@ def validate_dossier(path: Path):
     if not path.is_dir(): return {'status':'FAIL','findings':['Dossier directory missing']}
     try: manifest=read_json(path/'discovery_manifest.json')
     except DiscoveryError as exc: return {'status':'FAIL','findings':[str(exc)]}
+    manifest_files = manifest.get('files')
+    if not isinstance(manifest_files, dict):
+        findings.append('Manifest files must be an object')
+        manifest_files = {}
+    # The manifest cannot contain its own hash without recursive self-reference,
+    # but every other required payload must be explicitly covered by it.
     for name in FILES:
         target=path/name
         if not target.exists(): findings.append('Missing '+name); continue
-        expected=manifest.get('files',{}).get(name)
-        if expected and sha(target)!=expected: findings.append('Hash mismatch '+name)
+        if name == 'discovery_manifest.json': continue
+        expected=manifest_files.get(name)
+        if not isinstance(expected, str) or not expected:
+            findings.append('Missing manifest hash '+name); continue
+        if sha(target)!=expected: findings.append('Hash mismatch '+name)
+    for name in OPTIONAL_FILES:
+        target=path/name
+        expected=manifest_files.get(name)
+        if target.exists() and (not isinstance(expected, str) or not expected):
+            findings.append('Missing manifest hash '+name)
+        elif isinstance(expected, str) and (not target.exists() or sha(target)!=expected):
+            findings.append('Optional artifact mismatch '+name)
     if manifest.get('scientific_status')!='EXPLORATORY_HANDOFF_REQUIRES_V4_1_REVIEW': findings.append('Unsafe scientific status')
     index={}
     try:
@@ -131,10 +159,12 @@ def validate_dossier(path: Path):
             if item.get('portable'):
                 try:
                     artifact=contained(path,item.get('portable_path',''))
-                    if not artifact.is_file() or sha(artifact)!=item.get('sha256'):
+                    if not isinstance(item.get('sha256'), str) or not artifact.is_file() or sha(artifact)!=item.get('sha256'):
                         findings.append(f'Portable evidence hash mismatch {evidence_id}')
                 except DiscoveryError: findings.append(f'Portable evidence path escapes dossier {evidence_id}')
-            elif item.get('portability_status') not in {'STABLE_REFERENCE_REQUIRED','INCOMPLETE'}:
+            elif item.get('portability_status') == 'INCOMPLETE':
+                findings.append(f'Incomplete evidence {evidence_id}')
+            elif item.get('portability_status') != 'STABLE_REFERENCE_REQUIRED':
                 findings.append(f'Unclassified nonportable evidence {evidence_id}')
             elif item.get('portability_status')=='STABLE_REFERENCE_REQUIRED':
                 parsed = urllib.parse.urlparse(str(item.get('origin','')))
@@ -143,8 +173,21 @@ def validate_dossier(path: Path):
     except DiscoveryError as exc: findings.append(str(exc))
     portable_count=sum(1 for item in index.values() if isinstance(item,dict) and item.get('portable'))
     evidence_count=len(index)
+    if manifest.get('evidence_count') != evidence_count:
+        findings.append('Evidence count does not match evidence index')
+    declared_portability = manifest.get('evidence_portability')
+    if isinstance(declared_portability, list):
+        declared = {item.get('evidence_id'): (item.get('portable'), item.get('status'))
+                    for item in declared_portability if isinstance(item, dict)}
+        for evidence_id, item in index.items():
+            expected = declared.get(evidence_id)
+            actual = (item.get('portable'), item.get('portability_status')) if isinstance(item, dict) else None
+            if expected is None or expected != actual:
+                findings.append(f'Evidence portability declaration mismatch {evidence_id}')
+    else:
+        findings.append('Evidence portability declaration is missing')
     completeness='COMPLETE_PORTABLE' if portable_count==evidence_count else ('PARTIAL_EXTERNAL' if evidence_count else 'COMPLETE_PORTABLE')
-    return {'status':'PASS' if not findings else 'FAIL','findings':findings,'files':len(FILES),
+    return {'status':'PASS' if not findings else 'FAIL','findings':findings,'files':len(FILES) + sum(1 for name in OPTIONAL_FILES if name in manifest.get('files',{})),
             'evidence_completeness':completeness,'portable_evidence':portable_count,
             'evidence_count':evidence_count}
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0-candidate - 2026-10-10
+
+- Add an evidence-backed typed scientific knowledge graph with immutable
+  registration and explicit confidence states.
+- Add OpenAlex key isolation, redacted query envelopes, deterministic cache
+  keys, DOI/provider identity normalization and cross-provider deduplication.
+- Add a preregistered AST-only source-analysis pilot that never executes source
+  code and retains exploratory-only results.
+- Add deterministic capability routing and descriptive Sol/V1/V2 evaluation
+  records with cost accounting.
+- Add third-party source/license audit, architecture, evaluation and release
+  status documentation. External projects remain design references unless
+  behavior-tested in this runtime.
+
 ## 1.0.1 - 2026-10-10
 
 - Export portable, content-addressed dossier evidence and validate it after a

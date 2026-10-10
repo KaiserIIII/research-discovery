@@ -5,7 +5,7 @@ metadata:
   short-description: Evidence-bound research discovery and pilots
 ---
 
-# Research Discovery V1.0.1
+# Research Discovery V2.0 Candidate
 
 Run `python scripts/discovery.py --help` from this skill directory. This skill
 coordinates host capabilities and deterministic local records; it does not act
@@ -46,6 +46,19 @@ formal experiment system.
 10. Export and validate the dossier. `handoff_to_v4_1.md` explicitly leaves
    scientific authority with V4.1; V4.1 must independently review novelty,
    feasibility, protocol, statistics, reproducibility and publication sufficiency.
+
+## V2.0 core additions
+
+- `knowledge-graph-validate/register` validates typed Paper/Claim/Hypothesis,
+  Method/Dataset/Result relations and requires retained evidence on every edge.
+- Literature search normalizes DOI/provider identities, deduplicates records,
+  caches repeat queries and reads OpenAlex credentials only from the environment
+  or ignored local secret storage. Keys are never placed in evidence envelopes.
+- `static-analysis-register/run` performs a preregistered AST-only pilot on
+  immutable source evidence. It never imports or executes source and reports
+  `EXPLORATORY_ONLY`.
+- `evaluation-record/compare` records controlled direct-Sol, V1 and V2 runs;
+  descriptive deltas do not establish scientific superiority.
 
 ## Safety and limits
 
