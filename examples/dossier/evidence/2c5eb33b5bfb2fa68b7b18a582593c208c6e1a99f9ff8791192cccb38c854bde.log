@@ -1,0 +1,1 @@
+{"interpretation": "NEGATIVE", "measurement": {"bootstrap": 100, "ci_high": 0.0, "ci_low": 0.0, "effect": 0.0, "min_effect": 0.5, "n_control": 2, "n_treatment": 2}}

@@ -1,0 +1,24 @@
+[
+  {
+    "elapsed_seconds": 0.21945050000795163,
+    "interpretation": "NEGATIVE",
+    "limitations": [
+      "No network or path sandbox; limits are process/resource governors"
+    ],
+    "measurement": {
+      "bootstrap": 100,
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "effect": 0.0,
+      "min_effect": 0.5,
+      "n_control": 2,
+      "n_treatment": 2
+    },
+    "output_evidence": "E-2c5eb33b5bfb2fa68b7b",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "protocol_sha256": "0bbf7483127e3b2da31b192a3a13f634d2a55e0815a84c84e1ec88c106558f4e",
+    "status": "COMPLETED",
+    "stderr_evidence": null,
+    "stop_reason": null
+  }
+]

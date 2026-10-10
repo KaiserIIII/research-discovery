@@ -1,0 +1,116 @@
+[
+  {
+    "claim": "Mechanism changes at the boundary.",
+    "evidence_ids": [
+      "E-3004518cc5b70668ee4d"
+    ],
+    "failure_information": "Bounds this claim.",
+    "falsifier": "Effect stays below threshold.",
+    "followup": "Independent replication.",
+    "id": "c1",
+    "ideal_result": "A reproducible boundary is identified.",
+    "increment_kind": "boundary_evidence",
+    "nearest": [],
+    "pilot": "Compare frozen groups.",
+    "prediction": "Effect exceeds 0.5 under the fixed control.",
+    "question": "Which explanation predicts boundary c1?",
+    "resources": {
+      "disk_mb": 2,
+      "memory_mb": 128,
+      "seconds": 5
+    },
+    "rivals": [
+      "measurement artifact",
+      "mechanism"
+    ],
+    "route": "boundary",
+    "search_ids": [],
+    "significance": "A bounded result can change the next study.",
+    "assessment": {
+      "findings": [
+        "No actual nearest-neighbor search record"
+      ],
+      "id": "c1",
+      "ideal_result": "A reproducible boundary is identified.",
+      "novelty_proven": false,
+      "prior_art_matrix": [],
+      "status": "UNVERIFIED"
+    }
+  },
+  {
+    "claim": "Mechanism changes at the boundary.",
+    "evidence_ids": [
+      "E-3004518cc5b70668ee4d"
+    ],
+    "failure_information": "Bounds this claim.",
+    "falsifier": "Effect stays below threshold.",
+    "followup": "Independent replication.",
+    "id": "c2",
+    "ideal_result": "A reproducible boundary is identified.",
+    "increment_kind": "boundary_evidence",
+    "nearest": [],
+    "pilot": "Compare frozen groups.",
+    "prediction": "Effect exceeds 0.5 under the fixed control.",
+    "question": "Which explanation predicts boundary c2?",
+    "resources": {
+      "disk_mb": 2,
+      "memory_mb": 128,
+      "seconds": 5
+    },
+    "rivals": [
+      "measurement artifact",
+      "mechanism"
+    ],
+    "route": "failure",
+    "search_ids": [],
+    "significance": "A bounded result can change the next study.",
+    "assessment": {
+      "findings": [
+        "No actual nearest-neighbor search record"
+      ],
+      "id": "c2",
+      "ideal_result": "A reproducible boundary is identified.",
+      "novelty_proven": false,
+      "prior_art_matrix": [],
+      "status": "UNVERIFIED"
+    }
+  },
+  {
+    "claim": "Mechanism changes at the boundary.",
+    "evidence_ids": [
+      "E-3004518cc5b70668ee4d"
+    ],
+    "failure_information": "Bounds this claim.",
+    "falsifier": "Effect stays below threshold.",
+    "followup": "Independent replication.",
+    "id": "c3",
+    "ideal_result": "A reproducible boundary is identified.",
+    "increment_kind": "boundary_evidence",
+    "nearest": [],
+    "pilot": "Compare frozen groups.",
+    "prediction": "Effect exceeds 0.5 under the fixed control.",
+    "question": "Which explanation predicts boundary c3?",
+    "resources": {
+      "disk_mb": 2,
+      "memory_mb": 128,
+      "seconds": 5
+    },
+    "rivals": [
+      "measurement artifact",
+      "mechanism"
+    ],
+    "route": "mechanism",
+    "search_ids": [],
+    "significance": "A bounded result can change the next study.",
+    "assessment": {
+      "findings": [
+        "No actual nearest-neighbor search record"
+      ],
+      "id": "c3",
+      "ideal_result": "A reproducible boundary is identified.",
+      "novelty_proven": false,
+      "prior_art_matrix": [],
+      "status": "UNVERIFIED"
+    }
+  }
+]

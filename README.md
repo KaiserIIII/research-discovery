@@ -22,6 +22,9 @@ run `admit`. Export with `export`; verify with `validate` and inspect
 provider and stores a metadata-only envelope. Configure a real contact address
 for Crossref outside this repository if its polite-pool policy requires it.
 
+`examples/dossier/` is a generated synthetic handoff showing three competing
+routes and a retained negative pilot. Its result is deliberately exploratory.
+
 The bundled pilot runner is deliberately CPU-only and uses no third-party
 packages. It applies bounded time, memory and disk/process controls where the
 host permits them, but remains a resource governor rather than a security
