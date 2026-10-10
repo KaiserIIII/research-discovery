@@ -132,6 +132,12 @@ def runtime_capabilities() -> dict[str, Any]:
              "limitations": ["Upstream custom license and no runtime integration in this release."]},
             {"id": "botorch", "availability": "DESIGN_REFERENCE", "interface": "external_project",
              "limitations": ["No third-party dependency is installed or executed."]},
+            {"id": "knowledge_graph", "availability": "VERIFIED_EXECUTABLE", "interface": "evidence_backed_graph",
+             "limitations": ["Relations remain conditional on retained evidence."]},
+            {"id": "static_analysis_pilot", "availability": "VERIFIED_EXECUTABLE", "interface": "ast_parse_only",
+             "limitations": ["Parses source structure; never executes source and cannot establish semantics."]},
+            {"id": "evaluation_engine", "availability": "VERIFIED_EXECUTABLE", "interface": "record_and_compare",
+             "limitations": ["Descriptive comparison needs an independent holdout suite for scientific claims."]},
         ],
         "status_definitions": {
             "VERIFIED_EXECUTABLE": "Executed in this runtime with a retained output.",
@@ -141,6 +147,28 @@ def runtime_capabilities() -> dict[str, Any]:
             "DESIGN_REFERENCE": "Used for design ideas only; no code integrated.",
         },
     }
+
+
+def route_capability(capability: str, providers: list[dict[str, Any]], permissions: set[str] | list[str]) -> dict[str, Any]:
+    """Select the highest qualified provider without treating selection as truth."""
+    if not isinstance(capability, str) or not capability.strip():
+        raise DiscoveryError("Capability must be nonempty")
+    allowed = set(permissions)
+    rank = {"VERIFIED_EXECUTABLE": 0, "AVAILABLE_UNTESTED": 1, "HOST_WORKFLOW": 2, "DESIGN_REFERENCE": 3, "UNAVAILABLE": 4}
+    candidates = []
+    for item in providers:
+        if not isinstance(item, dict) or capability not in item.get("capabilities", []):
+            continue
+        if set(item.get("permissions", [])) - allowed:
+            continue
+        if item.get("network") and "network" not in allowed:
+            continue
+        candidates.append(item)
+    if not candidates:
+        return {"status": "FALLBACK", "capability": capability, "recovery": ["HOST_WORKFLOW", "ASK_AUTHOR"]}
+    selected = sorted(candidates, key=lambda item: (rank.get(item.get("availability"), 9), str(item.get("provider_id", ""))))[0]
+    return {"status": "PASS", "capability": capability, "provider": selected,
+            "truth_authority": "DETERMINISTIC_CHECKER", "fallback": "HOST_WORKFLOW"}
 
 
 def _resolve_script(skill_path: Path, relative: str) -> tuple[Path, Path]:

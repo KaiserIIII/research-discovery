@@ -8,10 +8,12 @@ import urllib.parse
 from pathlib import Path
 from .core import DiscoveryError, Project, contained, digest, read_json, sha, write_json
 from .registry import invoke_v41
+from .evaluation import compare_runs
 
 FILES = ('discovery_manifest.json','hypotheses.json','prior_art_matrix.md','pilot_protocol.json',
          'pilot_results.json','evidence_index.json','rival_explanations.md','limitations.md',
          'discovery_dossier.md','handoff_to_v4_1.md')
+OPTIONAL_FILES = ('knowledge_graph.json', 'static_analysis_results.json', 'evaluation_report.json')
 PORTABLE_EVIDENCE_LIMIT = 4 * 1024 * 1024
 
 def _safe_text(value):
@@ -58,7 +60,7 @@ def export_dossier(project: Project, output: Path):
             item.update(portable=False,portability_status='INCOMPLETE',portability_reason=str(exc))
         index[evidence_id]=item
         portability.append({'evidence_id':evidence_id,'portable':item['portable'],'status':item['portability_status']})
-    manifest=dict(schema_version='1.0',skill_version='1.0.1',project_schema='1.0',
+    manifest=dict(schema_version='1.0',skill_version='2.0.0-candidate',project_schema='1.0',
                   exported_utc=project.manifest['created_utc'],domain=project.manifest['domain'],
                   stage_labels=['DISCOVERY','PILOT','EXPLORATORY_POST_HOC'],
                   scientific_status='EXPLORATORY_HANDOFF_REQUIRES_V4_1_REVIEW',
@@ -77,6 +79,15 @@ def export_dossier(project: Project, output: Path):
       'pilot_results.json':pilot_events,
       'evidence_index.json':index,
     }
+    graph_snapshot = next((e['payload'] for e in reversed(events)
+                           if e['kind'] == 'snapshot' and e['payload'].get('kind') == 'knowledge_graph'), None)
+    if graph_snapshot:
+        payloads['knowledge_graph.json'] = read_json(contained(project.root, graph_snapshot['path']))
+    static_events = [e['payload'] for e in events if e['kind'] in {'static_analysis_registered', 'static_analysis_result'}]
+    if static_events:
+        payloads['static_analysis_results.json'] = static_events
+    if any(e['kind'] == 'evaluation_run' for e in events):
+        payloads['evaluation_report.json'] = compare_runs(project)
     for name,value in payloads.items(): write_json(output/name,value)
     matrix=['# Prior-art matrix','', '| Claim | Relation | Source | Exact region | Objection | Unresolved |','|---|---|---|---|---|---|']
     for item in prior:
@@ -107,7 +118,8 @@ def export_dossier(project: Project, output: Path):
     # A manifest cannot contain its own hash without recursive self-reference;
     # its journal/project source remains the integrity root. All payload files
     # are content-addressed here.
-    hashes={name:sha(output/name) for name in FILES if name!='discovery_manifest.json'}
+    hashes={name:sha(output/name) for name in (*FILES, *OPTIONAL_FILES)
+            if name!='discovery_manifest.json' and (output/name).is_file()}
     manifest['files']=hashes; write_json(output/'discovery_manifest.json',manifest)
     return dict(status='PASS',output=str(output),files=hashes,candidates=len(hypotheses),pilots=len(pilot_events))
 
@@ -121,6 +133,10 @@ def validate_dossier(path: Path):
         if not target.exists(): findings.append('Missing '+name); continue
         expected=manifest.get('files',{}).get(name)
         if expected and sha(target)!=expected: findings.append('Hash mismatch '+name)
+    for name in OPTIONAL_FILES:
+        target=path/name
+        expected=manifest.get('files',{}).get(name)
+        if expected and (not target.exists() or sha(target)!=expected): findings.append('Optional artifact mismatch '+name)
     if manifest.get('scientific_status')!='EXPLORATORY_HANDOFF_REQUIRES_V4_1_REVIEW': findings.append('Unsafe scientific status')
     index={}
     try:
@@ -144,7 +160,7 @@ def validate_dossier(path: Path):
     portable_count=sum(1 for item in index.values() if isinstance(item,dict) and item.get('portable'))
     evidence_count=len(index)
     completeness='COMPLETE_PORTABLE' if portable_count==evidence_count else ('PARTIAL_EXTERNAL' if evidence_count else 'COMPLETE_PORTABLE')
-    return {'status':'PASS' if not findings else 'FAIL','findings':findings,'files':len(FILES),
+    return {'status':'PASS' if not findings else 'FAIL','findings':findings,'files':len(FILES) + sum(1 for name in OPTIONAL_FILES if name in manifest.get('files',{})),
             'evidence_completeness':completeness,'portable_evidence':portable_count,
             'evidence_count':evidence_count}
 

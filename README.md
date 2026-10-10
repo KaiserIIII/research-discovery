@@ -1,4 +1,4 @@
-# Research Discovery V1.0.1
+# Research Discovery V2.0 Candidate
 
 This evidence-bound Codex Skill helps researchers find and test research
 questions. It records public searches and lawful full text, competing
@@ -75,3 +75,22 @@ or source files.
 
 The private ecosystem and API audit that supports adoption decisions is kept
 outside this distributable repository at `E:\final\research-discovery-audit`.
+
+## V2.0 verified core
+
+V2 adds evidence-backed typed knowledge graph edges, deterministic provider
+routing, DOI/provider identity normalization with a redacted OpenAlex cache,
+and a safe AST-only source-analysis pilot. It also records comparable
+`sol_direct`, `v1.0.1` and `v2.0` evaluation runs. These are control-plane
+capabilities; they do not prove novelty, causality or scientific superiority.
+
+```powershell
+python scripts/discovery.py knowledge-graph-validate graph.json
+python scripts/discovery.py static-analysis-register projects\demo protocol.json
+python scripts/discovery.py static-analysis-run projects\demo protocol.json
+python scripts/discovery.py evaluation-compare projects\demo
+```
+
+See `docs/third-party-audit-v2.md`, `docs/v2-architecture.md` and
+`docs/v2-release-status.md` for fixed upstream references, integration status
+and current scientific limitations.
