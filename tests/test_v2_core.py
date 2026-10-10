@@ -26,7 +26,9 @@ class V2CoreTests(unittest.TestCase):
         graph = create_graph()
         add_node(graph, "paper:1", "Paper", title="A paper")
         add_node(graph, "claim:1", "Claim", text="A mechanism is observed")
-        add_edge(graph, "paper:1", "claim:1", "SUPPORTS", evidence_ids=[evidence_id], confidence="SUPPORTED")
+        add_edge(graph, "paper:1", "claim:1", "SUPPORTS", evidence_ids=[evidence_id], confidence="SUPPORTED",
+                 anchors={evidence_id: {"start_line": 1, "end_line": 1,
+                                        "quote": "A mechanism is observed.", "relation": "SUPPORTS"}})
         self.assertEqual(validate_graph(graph)["status"], "PASS")
         graph_id = register_graph(self.project, graph)
         self.assertTrue(graph_id.startswith("G-"))
@@ -59,16 +61,53 @@ class V2CoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "COMPLETED")
         self.assertEqual(result["measurement"]["functions"], 1)
         self.assertEqual(result["measurement"]["branches"], 1)
-        self.assertEqual(result["interpretation"], "POSITIVE")
+        self.assertEqual(result["interpretation"], "INCONCLUSIVE")
+        self.assertEqual(result["execution_mode"], "AST_PARSE_ONLY_BOUNDED")
+        self.assertTrue(result["output_evidence"])
 
     def test_evaluation_records_and_compares_baselines(self):
-        record_run(self.project, "sol_direct", "case-1", {"fact_accuracy": 0.5}, cost=10, actor="Sol")
-        record_run(self.project, "v1.0.1", "case-1", {"fact_accuracy": 0.6}, cost=9, actor="Sol")
-        record_run(self.project, "v2.0", "case-1", {"fact_accuracy": 0.8}, cost=8, actor="Sol")
+        # Different cases/budgets cannot create a direct delta.
+        record_run(self.project, "v1.0.1", "case-a", {"fact_accuracy": 0.6}, cost=9, actor="Sol", source="real")
+        record_run(self.project, "v2.0", "case-b", {"fact_accuracy": 0.8}, cost=8, actor="Sol", source="real")
+        # A matched real pair can be compared even when observed costs differ;
+        # the allocated budget and all frozen conditions must match.
+        conditions = {"dataset": "frozen-1", "prompt": "p"}
+        record_run(self.project, "v1.0.1", "case-1", {"fact_accuracy": 0.6}, cost=9, budget=10, actor="Sol", conditions=conditions, source="real")
+        record_run(self.project, "v2.0", "case-1", {"fact_accuracy": 0.8}, cost=8, budget=10, actor="Sol", conditions=conditions, source="real")
+        # Synthetic fixtures with matching keys remain blocked from uplift claims.
+        record_run(self.project, "v1.0.1", "synthetic", {"fact_accuracy": 0.1}, cost=1, actor="Sol")
+        record_run(self.project, "v2.0", "synthetic", {"fact_accuracy": 0.9}, cost=1, actor="Sol")
         report = compare_runs(self.project)
         self.assertEqual(report["status"], "PASS")
         self.assertEqual(report["metrics"]["fact_accuracy"]["delta_v2_vs_v1"], 0.2)
-        self.assertEqual(report["cost"]["v2.0"], 8.0)
+        self.assertEqual(report["means_by_source"]["real"]["v2.0"]["fact_accuracy"], 0.8)
+        self.assertEqual(report["pairing"]["real_pairs"], 1)
+        self.assertTrue(report["pairing"]["synthetic_deltas_blocked"])
+
+    def test_verified_graph_edge_requires_original_text_anchor(self):
+        graph = create_graph()
+        add_node(graph, "a", "Claim")
+        add_node(graph, "b", "Claim")
+        with self.assertRaises(DiscoveryError):
+            add_edge(graph, "a", "b", "SUPPORTS", evidence_ids=["E1"], confidence="SUPPORTED")
+
+    def test_graph_register_rejects_changed_anchor_and_metadata_only_support(self):
+        source = self.root / "source.txt"
+        source.write_text("Observed mechanism.\n", encoding="utf-8")
+        evidence_id = self.project.add_evidence(source, "primary source", "text")
+        graph = create_graph(); add_node(graph, "a", "Claim"); add_node(graph, "b", "Claim")
+        add_edge(graph, "a", "b", "SUPPORTS", evidence_ids=[evidence_id], confidence="SUPPORTED",
+                 anchors={evidence_id: {"start_line": 1, "end_line": 1, "quote": "Forged.", "relation": "SUPPORTS"}})
+        with self.assertRaises(DiscoveryError):
+            register_graph(self.project, graph)
+
+        metadata = self.root / "metadata.json"; metadata.write_text("{}\n", encoding="utf-8")
+        metadata_id = self.project.add_evidence(metadata, "metadata API", "literature_query")
+        graph2 = create_graph(); add_node(graph2, "a", "Claim"); add_node(graph2, "b", "Claim")
+        add_edge(graph2, "a", "b", "SUPPORTS", evidence_ids=[metadata_id], confidence="SUPPORTED",
+                 anchors={metadata_id: {"start_line": 1, "end_line": 1, "quote": "{}", "relation": "SUPPORTS"}})
+        with self.assertRaises(DiscoveryError):
+            register_graph(self.project, graph2)
 
 
 if __name__ == "__main__":

@@ -48,7 +48,7 @@ def parser():
     kgr=sub.add_parser('knowledge-graph-register',help='register an evidence-backed V2 knowledge graph'); kgr.add_argument('project',type=Path); kgr.add_argument('graph',type=Path)
     sar=sub.add_parser('static-analysis-register',help='freeze a source-analysis pilot'); sar.add_argument('project',type=Path); sar.add_argument('protocol',type=Path)
     sax=sub.add_parser('static-analysis-run',help='run a frozen source-analysis pilot'); sax.add_argument('project',type=Path); sax.add_argument('protocol',type=Path)
-    er=sub.add_parser('evaluation-record',help='record one controlled baseline run'); er.add_argument('project',type=Path); er.add_argument('--baseline',required=True,choices=['sol_direct','v1.0.1','v2.0']); er.add_argument('--case',required=True); er.add_argument('--scores',type=Path,required=True); er.add_argument('--cost',type=float,required=True); er.add_argument('--actor',required=True)
+    er=sub.add_parser('evaluation-record',help='record one controlled baseline run'); er.add_argument('project',type=Path); er.add_argument('--baseline',required=True,choices=['sol_direct','v1.0.1','v2.0']); er.add_argument('--case',required=True); er.add_argument('--scores',type=Path,required=True); er.add_argument('--cost',type=float,required=True); er.add_argument('--budget',type=float); er.add_argument('--conditions',type=Path); er.add_argument('--source',choices=['real','synthetic'],default='synthetic'); er.add_argument('--actor',required=True)
     ec=sub.add_parser('evaluation-compare',help='compare recorded baseline runs'); ec.add_argument('project',type=Path)
     return p
 def main(argv=None):
@@ -83,7 +83,7 @@ def main(argv=None):
         if args.command=='knowledge-graph-register': return out({'status':'PASS','graph_id':register_graph(Project(args.project),read_json(args.graph))})
         if args.command=='static-analysis-register': return out(dict(status='PASS',protocol=preregister_static_analysis(Project(args.project),read_json(args.protocol))))
         if args.command=='static-analysis-run': return out(run_static_analysis(Project(args.project),read_json(args.protocol)))
-        if args.command=='evaluation-record': return out(record_run(Project(args.project),args.baseline,args.case,read_json(args.scores),cost=args.cost,actor=args.actor))
+        if args.command=='evaluation-record': return out(record_run(Project(args.project),args.baseline,args.case,read_json(args.scores),cost=args.cost,budget=args.budget,conditions=read_json(args.conditions) if args.conditions else None,source=args.source,actor=args.actor))
         if args.command=='evaluation-compare': return out(compare_runs(Project(args.project)))
     except DiscoveryError as exc:
         print(json.dumps({'status':'ERROR','error':str(exc)},ensure_ascii=False,indent=2)); return 2

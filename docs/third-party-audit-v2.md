@@ -19,3 +19,12 @@ The only V2 capabilities marked `VERIFIED_EXECUTABLE` are code owned by this
 repository and covered by behavior tests: evidence-backed graph registration,
 AST-only static analysis, literature normalization/cache and evaluation
 recording. A GitHub README or star count is never treated as runtime proof.
+
+## Requested V2 integrations
+
+The audit found no executable integration for PaperQA2/PaperQA, AstaBench,
+Inspect AI, or AIDE/AideML in this branch. Their rows above remain
+`DESIGN_REFERENCE`; no dependency was installed, no private material was sent
+to them, and no capability claim is derived from their documentation. The
+local evaluation, bounded AST worker, evidence ledger and provider adapters are
+the only behavior-tested implementations in this release.

@@ -105,17 +105,39 @@ class LiteratureTests(unittest.TestCase):
         self.assertEqual(result['papers'][0]['doi'], '10.1/a')
         self.assertEqual(result['papers'][0]['verification'], 'METADATA_ONLY')
 
-    def test_openalex_key_is_sent_but_never_retained(self):
+    def test_openalex_key_is_sent_in_header_but_never_retained(self):
         payload = {'results': [{'id': 'https://openalex.org/W1', 'title': 'A study', 'publication_year': 2024,
                                 'doi': 'https://doi.org/10.1/a', 'ids': {'doi': 'https://doi.org/10.1/a'}}]}
         with patch.dict('os.environ', {'OPENALEX_API_KEY': 'secret-key'}, clear=False), \
              patch('rd.literature.urllib.request.urlopen', return_value=Response(json.dumps(payload).encode())) as transport:
             result = search(self.project, 'openalex', 'study', public_query=True)
         request = transport.call_args.args[0]
-        self.assertIn('secret-key', request.full_url)
+        self.assertNotIn('secret-key', request.full_url)
+        self.assertEqual(request.headers.get('Authorization'), 'Bearer secret-key')
         self.assertEqual(result['papers'][0]['canonical_id'], 'doi:10.1/a')
         envelope = json.loads((self.project.root / self.project.evidence()[result['query_evidence']]['path']).read_text(encoding='utf-8'))
         self.assertNotIn('secret-key', json.dumps(envelope))
+
+    def test_failed_429_is_not_cached_and_can_retry(self):
+        from urllib.error import HTTPError
+        error = HTTPError('https://api.openalex.org/works', 429, 'rate limited', {}, io.BytesIO(b'limited'))
+        with patch('rd.literature.urllib.request.urlopen', side_effect=error) as transport:
+            first = search(self.project, 'openalex', 'retry me', public_query=True)
+            second = search(self.project, 'openalex', 'retry me', public_query=True)
+        self.assertEqual(first['status'], 'ERROR')
+        self.assertEqual(second['status'], 'ERROR')
+        self.assertFalse(second.get('cache_hit', False))
+        self.assertEqual(transport.call_count, 6)
+
+    def test_openalex_quota_exhaustion_stops_429_retry_loop(self):
+        from urllib.error import HTTPError
+        error = HTTPError('https://api.openalex.org/works', 429, 'quota exhausted',
+                          {'X-RateLimit-Remaining': '0'}, io.BytesIO(b'quota exhausted'))
+        with patch('rd.literature.urllib.request.urlopen', side_effect=error) as transport:
+            result = search(self.project, 'openalex', 'quota', public_query=True)
+        self.assertEqual(result['status'], 'ERROR')
+        self.assertEqual(len(result['attempts']), 1)
+        self.assertTrue(result['attempts'][0]['quota_exhausted'])
 
     def test_repeated_query_uses_local_cache_without_second_request(self):
         payload = {'message': {'items': [{'DOI': '10.1/a', 'title': ['A paper'], 'published': {'date-parts': [[2024]]}}]}}

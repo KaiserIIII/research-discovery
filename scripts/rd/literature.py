@@ -165,7 +165,9 @@ def search(project: Project, provider: str, query: str, limit: int = 5, public_q
     host, template = PROVIDERS[provider]
     safe_url = template.format(query=urllib.parse.quote(query.strip()), limit=limit)
     secret, key_source = _openalex_key() if provider == "openalex" else (None, "none")
-    url = safe_url + ("&api_key=" + urllib.parse.quote(secret) if provider == "openalex" and secret else "")
+    # Authentication is added as a bearer header below; keep the safe URL
+    # credential-free for logs, exceptions and retained evidence.
+    url = safe_url
     cache_key = hashlib.sha256(f"{provider}\n{query.strip().lower()}\n{limit}".encode("utf-8")).hexdigest()
     cache_path = project.root / "runs" / ("literature-cache-" + cache_key + ".json")
     try:
@@ -174,22 +176,30 @@ def search(project: Project, provider: str, query: str, limit: int = 5, public_q
         cache_valid = cache_stamp.read_text(encoding="ascii").strip() == _cache_digest(cache_path)
     except (OSError, ValueError, UnicodeError):
         cached, cache_valid = None, False
-    if cache_valid and isinstance(cached, dict) and cached.get("provider") == provider and cached.get("query") == query:
+    if cache_valid and isinstance(cached, dict) and cached.get("provider") == provider and cached.get("query") == query and cached.get("payload_ok") is True:
         evidence_id = _evidence(project, cached)
-        return {"status": "OK" if cached.get("payload_ok") else "ERROR", "query_evidence": evidence_id,
+        return {"status": "OK", "query_evidence": evidence_id,
                 "papers": cached.get("papers", []), "complete": False, "provider": provider, "query": query,
                 "attempts": cached.get("attempts", []), "cache_hit": True, "error": cached.get("error")}
     attempts: list[dict[str, Any]] = []
     final_status: int | None = None
     raw_text = ""
+    response_headers: dict[str, str] = {}
+    quota_exhausted = False
     payload: dict[str, Any] | None = None
     for attempt in range(3):
         project.consume("network_requests", 1)
         try:
-            request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "research-discovery/2.0"})
+            request_headers = {"Accept": "application/json", "User-Agent": "research-discovery/2.0"}
+            # OpenAlex supports bearer authentication. Keeping the credential
+            # out of the URL prevents accidental exposure through URL logging,
+            # HTTPError strings or proxy diagnostics.
+            if provider == "openalex" and secret:
+                request_headers["Authorization"] = "Bearer " + secret
+            request = urllib.request.Request(url, headers=request_headers)
             with urllib.request.urlopen(request, timeout=5) as response:
                 remaining_bytes = int(project.remaining("max_download_bytes"))
-                raw, status, _, overflow = _read_response(response, remaining_bytes)
+                raw, status, response_headers, overflow = _read_response(response, remaining_bytes)
             # Reserve envelope/diagnostic bytes in the aggregate acquisition
             # budget; a tiny remaining budget must fail before treating a
             # truncated metadata response as a valid search.
@@ -205,6 +215,7 @@ def search(project: Project, provider: str, query: str, limit: int = 5, public_q
             break
         except urllib.error.HTTPError as exc:
             final_status = exc.code
+            response_headers = {str(k).lower(): str(v) for k, v in getattr(exc, "headers", {}).items()}
             remaining_error_bytes = int(project.remaining("max_download_bytes"))
             error_bytes = exc.read(remaining_error_bytes + 1) if getattr(exc, "fp", None) else b""
             overflow = len(error_bytes) > remaining_error_bytes
@@ -213,6 +224,13 @@ def search(project: Project, provider: str, query: str, limit: int = 5, public_q
             body = error_bytes.decode("utf-8", errors="replace")
             raw_text = body or raw_text
             attempts.append({"attempt": attempt + 1, "http": exc.code, "error": _redact(raw_text, secret)})
+            remaining_header = response_headers.get("x-ratelimit-remaining", "")
+            quota_exhausted = exc.code == 429 and (
+                remaining_header.strip() == "0" or any(token in body.lower() for token in ("quota", "over budget", "daily limit"))
+            )
+            if quota_exhausted:
+                attempts[-1]["quota_exhausted"] = True
+                break
             if overflow:
                 attempts[-1]["error"] = "response exceeds download budget"
                 break
@@ -228,11 +246,21 @@ def search(project: Project, provider: str, query: str, limit: int = 5, public_q
             else:
                 raw_text = raw_text or str(exc)
     papers = _papers(provider, payload or {})
+    rate_limit = {key: value for key, value in response_headers.items()
+                  if key.startswith("x-ratelimit-") and key in {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-ratelimit-credits-used"}}
     envelope = {"provider": provider, "query": query, "url": safe_url, "timestamp": now(), "http": final_status,
                 "status": final_status or "ERROR", "raw": _redact(raw_text, secret), "papers": papers,
                 "attempts": attempts, "payload_ok": payload is not None, "api_key_source": key_source,
+                "rate_limit": rate_limit, "quota_exhausted": quota_exhausted,
                 "cache_key": cache_key, "error": None if payload is not None else "metadata request failed"}
-    cache_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    cache_path.with_suffix(cache_path.suffix + ".sha256").write_text(_cache_digest(cache_path) + "\n", encoding="ascii")
+    # Cache only successful metadata. A 429, transport error or exhausted local
+    # download budget is transient/failure state and must never suppress a later
+    # retry with a stale error cache.
+    if payload is not None:
+        cache_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        cache_path.with_suffix(cache_path.suffix + ".sha256").write_text(_cache_digest(cache_path) + "\n", encoding="ascii")
+    else:
+        cache_path.unlink(missing_ok=True)
+        cache_path.with_suffix(cache_path.suffix + ".sha256").unlink(missing_ok=True)
     evidence_id = _evidence(project, envelope)
     return {"status": "OK" if payload is not None else "ERROR", "query_evidence": evidence_id, "papers": papers, "complete": False, "provider": provider, "query": query, "attempts": attempts, "cache_hit": False, "error": None if payload is not None else "metadata request failed"}

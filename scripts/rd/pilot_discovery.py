@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import ast
 import copy
+import json
+import sys
 import time
+from pathlib import Path
 from typing import Any
 
-from .core import DiscoveryError, Project, contained, digest
+from .core import DiscoveryError, Project, contained, digest, sha, write_json
+from .limits import run_bounded
 
 _REQUIRED = {"id", "candidate_id", "stage", "source_evidence", "metrics", "controls",
              "limits", "seed", "stop_rule", "predictions"}
@@ -34,6 +38,8 @@ def _validate(protocol: dict[str, Any], project: Project) -> tuple[dict[str, Any
     path = contained(project.root, entry["path"])
     if not path.is_file():
         raise DiscoveryError("Static analysis source is missing on disk")
+    if sha(path) != entry.get("sha256"):
+        raise DiscoveryError("Static analysis source evidence was tampered")
     limits = protocol["limits"]
     if not isinstance(limits, dict) or any(key not in limits for key in ("seconds", "memory_mb", "disk_mb", "cpu_seconds")):
         raise DiscoveryError("Static analysis limits are incomplete")
@@ -95,27 +101,47 @@ def run_static_analysis(project: Project, protocol: dict[str, Any]) -> dict[str,
     if any(event["kind"] == "static_analysis_result" and event["payload"].get("protocol_sha256") == registration_sha
            for event in project.events()):
         raise DiscoveryError("Static analysis registration has already run")
-    _, path = _validate(protocol, project)
+    entry, path = _validate(protocol, project)
     project.consume("max_pilots", 1)
+    run_root = project.root / "runs" / ("ast-" + registration_sha)
+    run_root.mkdir(parents=True, exist_ok=True)
+    runtime = {"source_path": str(path), "metrics": protocol["metrics"]}
+    protocol_path = run_root / "protocol.json"
+    write_json(protocol_path, runtime)
+    worker = str(Path(__file__).with_name("ast_worker.py"))
     started = time.monotonic()
-    measurement = _measure(path.read_text(encoding="utf-8"))
-    elapsed = time.monotonic() - started
+    bounded = run_bounded([sys.executable, "-I", worker, str(protocol_path)], run_root, protocol["limits"])
+    elapsed = max(time.monotonic() - started, bounded.get("elapsed_seconds", 0.0))
     try:
         project.consume("total_seconds", min(elapsed, project.remaining("total_seconds")))
     except DiscoveryError:
         pass
-    selected = {key: measurement[key] for key in protocol["metrics"]}
-    interpretation = "INCONCLUSIVE"
-    if measurement.get("syntax_error"):
-        interpretation = "FAILED"
-    elif measurement.get("branches", 0) > 0 or measurement.get("functions", 0) > 0:
-        interpretation = "POSITIVE"
-    else:
-        interpretation = "NEGATIVE"
-    result = {"status": "COMPLETED", "interpretation": interpretation, "measurement": selected,
-              "all_metrics": measurement, "protocol_sha256": registration_sha,
+    stdout_path, stderr_path = (Path(bounded["stdout_path"]), Path(bounded["stderr_path"]))
+    output_evidence = project.add_evidence(stdout_path, "AST pilot worker stdout", "pilot_output")
+    stderr_evidence = None
+    if stderr_path.stat().st_size or bounded["returncode"] not in (0, None) or bounded.get("stop_reason"):
+        stderr_evidence = project.add_evidence(stderr_path, "AST pilot worker stderr", "pilot_stderr")
+    result = {"status": "STOPPED" if bounded.get("stop_reason") else ("COMPLETED" if bounded["returncode"] == 0 else "FAILED"),
+              "interpretation": "INCONCLUSIVE", "measurement": {}, "all_metrics": {},
+              "output_evidence": output_evidence, "stderr_evidence": stderr_evidence,
+              "protocol_sha256": registration_sha,
               "candidate_id": protocol["candidate_id"], "elapsed_seconds": elapsed,
-              "execution_mode": "AST_PARSE_ONLY", "scientific_status": "EXPLORATORY_ONLY",
-              "limitations": ["Static structure is not semantic correctness or causal evidence."]}
+              "execution_mode": "AST_PARSE_ONLY_BOUNDED", "scientific_status": "EXPLORATORY_ONLY",
+              "stop_reason": bounded.get("stop_reason"),
+              "limitations": ["Static structure is an observation, not semantic correctness, a causal effect, or support for a scientific hypothesis."]}
+    if result["status"] == "COMPLETED":
+        try:
+            payload = json.loads(stdout_path.read_text(encoding="utf-8"))
+            if payload.get("status") != "COMPLETED":
+                raise ValueError(payload.get("error", "AST worker failed"))
+            measurement = payload["measurement"]
+            result["all_metrics"] = measurement
+            result["measurement"] = {key: measurement[key] for key in protocol["metrics"]}
+            if measurement.get("syntax_error"):
+                result["interpretation"] = "FAILED"
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            result["status"] = "FAILED"
+            result["error"] = str(exc)
+            result["stderr_evidence"] = stderr_evidence or project.add_evidence(stderr_path, "AST pilot parse failure", "pilot_stderr")
     project.record("static_analysis_result", result)
     return result

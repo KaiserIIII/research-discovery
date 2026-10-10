@@ -8,7 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from .core import DiscoveryError, digest
+from .core import DiscoveryError, contained, digest, sha
 
 NODE_TYPES = {
     "Paper", "Claim", "Hypothesis", "Assumption", "Method", "Dataset",
@@ -20,6 +20,7 @@ RELATIONS = {
     "BOUNDS", "EXPLAINS", "TESTS", "DERIVED_FROM", "QUALIFIES",
 }
 CONFIDENCE = {"UNVERIFIED", "METADATA_ONLY", "SUPPORTED", "CONDITIONAL", "REJECTED"}
+ANCHOR_REQUIRED = {"SUPPORTED", "CONDITIONAL", "REJECTED"}
 
 
 def create_graph() -> dict[str, Any]:
@@ -45,6 +46,7 @@ def add_node(graph: dict[str, Any], node_id: str, node_type: str, **data: Any) -
 def add_edge(
     graph: dict[str, Any], source: str, target: str, relation: str,
     *, evidence_ids: list[str], confidence: str = "UNVERIFIED", conditions: Any = None,
+    anchors: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if relation not in RELATIONS or confidence not in CONFIDENCE:
         raise DiscoveryError("Unknown graph relation or confidence")
@@ -52,9 +54,22 @@ def add_edge(
         raise DiscoveryError("Graph edge references an unknown node")
     if not isinstance(evidence_ids, list) or not evidence_ids or any(not isinstance(item, str) or not item for item in evidence_ids):
         raise DiscoveryError("Every graph edge needs one or more evidence ids")
+    unique_evidence = list(dict.fromkeys(evidence_ids))
+    anchors = {} if anchors is None else deepcopy(anchors)
+    if not isinstance(anchors, dict) or any(item not in unique_evidence for item in anchors):
+        raise DiscoveryError("Graph anchors must map evidence ids used by the edge")
+    if confidence in ANCHOR_REQUIRED and any(item not in anchors for item in unique_evidence):
+        raise DiscoveryError("Verified graph edges need an original-text anchor for every evidence id")
+    for evidence_id, anchor in anchors.items():
+        if not isinstance(anchor, dict) or not isinstance(anchor.get("start_line"), int) or isinstance(anchor.get("start_line"), bool) \
+                or not isinstance(anchor.get("end_line"), int) or isinstance(anchor.get("end_line"), bool) \
+                or anchor["start_line"] < 1 or anchor["end_line"] < anchor["start_line"] \
+                or not isinstance(anchor.get("quote"), str) or not anchor["quote"] \
+                or anchor.get("relation") != relation:
+            raise DiscoveryError("Graph evidence anchors must contain exact lines, quote and matching relation")
     edge = {"source": source, "target": target, "relation": relation,
-            "evidence_ids": list(dict.fromkeys(evidence_ids)), "confidence": confidence,
-            "conditions": deepcopy(conditions) if conditions is not None else {}}
+            "evidence_ids": unique_evidence, "confidence": confidence,
+            "conditions": deepcopy(conditions) if conditions is not None else {}, "anchors": anchors}
     if any(item == edge for item in graph.get("edges", [])):
         raise DiscoveryError("Duplicate knowledge graph edge")
     graph["edges"].append(edge)
@@ -89,6 +104,20 @@ def validate_graph(graph: dict[str, Any]) -> dict[str, Any]:
         evidence = edge.get("evidence_ids")
         if not isinstance(evidence, list) or not evidence:
             findings.append("edge has no evidence")
+        anchors = edge.get("anchors", {})
+        if not isinstance(anchors, dict) or any(item not in (evidence or []) for item in anchors):
+            findings.append("edge anchors reference unknown evidence")
+        if edge.get("confidence") in ANCHOR_REQUIRED:
+            if not isinstance(anchors, dict) or any(item not in anchors for item in (evidence or [])):
+                findings.append("verified edge has no anchor for every evidence")
+        if isinstance(anchors, dict):
+            for anchor in anchors.values():
+                if not isinstance(anchor, dict) or not isinstance(anchor.get("start_line"), int) or isinstance(anchor.get("start_line"), bool) \
+                        or not isinstance(anchor.get("end_line"), int) or isinstance(anchor.get("end_line"), bool) \
+                        or anchor["start_line"] < 1 or anchor["end_line"] < anchor["start_line"] \
+                        or not isinstance(anchor.get("quote"), str) or not anchor["quote"] \
+                        or anchor.get("relation") != edge.get("relation"):
+                    findings.append("edge anchor is malformed or relation does not match")
         key = (edge.get("source"), edge.get("target"), edge.get("relation"), tuple(evidence or []))
         if key in seen_edges:
             findings.append("duplicate edge")
@@ -105,6 +134,25 @@ def register_graph(project, graph: dict[str, Any]) -> str:
     missing = sorted({eid for edge in graph["edges"] for eid in edge["evidence_ids"] if eid not in evidence})
     if missing:
         raise DiscoveryError("Knowledge graph references missing evidence: " + ", ".join(missing))
+    if project.audit():
+        raise DiscoveryError("Cannot register a graph while evidence is tampered")
+    for edge in graph["edges"]:
+        if edge.get("confidence") not in ANCHOR_REQUIRED:
+            continue
+        for evidence_id in edge["evidence_ids"]:
+            entry = evidence[evidence_id]
+            if entry.get("kind") == "literature_query":
+                raise DiscoveryError("Metadata-only literature evidence cannot verify a graph edge")
+            path = contained(project.root, entry.get("path", ""))
+            if not path.is_file() or sha(path) != entry.get("sha256"):
+                raise DiscoveryError("Graph evidence was missing or tampered: " + evidence_id)
+            anchor = edge["anchors"][evidence_id]
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if anchor["end_line"] > len(lines):
+                raise DiscoveryError("Graph evidence anchor is outside the retained artifact: " + evidence_id)
+            exact = "\n".join(lines[anchor["start_line"] - 1:anchor["end_line"]])
+            if exact != anchor["quote"]:
+                raise DiscoveryError("Graph evidence anchor does not match the retained artifact: " + evidence_id)
     frozen = deepcopy(graph)
     graph_id = "G-" + digest(frozen)[:20]
     project.freeze("knowledge_graph", frozen)

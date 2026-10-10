@@ -78,11 +78,15 @@ outside this distributable repository at `E:\final\research-discovery-audit`.
 
 ## V2.0 verified core
 
-V2 adds evidence-backed typed knowledge graph edges, deterministic provider
-routing, DOI/provider identity normalization with a redacted OpenAlex cache,
-and a safe AST-only source-analysis pilot. It also records comparable
-`sol_direct`, `v1.0.1` and `v2.0` evaluation runs. These are control-plane
-capabilities; they do not prove novelty, causality or scientific superiority.
+V2 adds evidence-backed typed knowledge graph edges that require exact retained
+text anchors for verified relations, deterministic provider routing,
+DOI/provider identity normalization with a redacted OpenAlex cache, and a safe
+AST-only source-analysis pilot executed in the bounded worker. AST counts are
+structural observations and remain inconclusive about scientific hypotheses.
+Evaluation records distinguish real runs from synthetic fixtures and only pair
+real runs with identical case, actor, conditions and budget. These are
+control-plane capabilities; they do not prove novelty, causality or scientific
+superiority.
 
 ```powershell
 python scripts/discovery.py knowledge-graph-validate graph.json

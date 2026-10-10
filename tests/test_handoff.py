@@ -1,4 +1,5 @@
 import json
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -39,12 +40,38 @@ class HandoffTests(unittest.TestCase):
         source=root/'source.txt'; source.write_text('claim\n',encoding='utf-8')
         eid=project.add_evidence(source,'synthetic source','text')
         graph=create_graph(); add_node(graph,'paper:1','Paper'); add_node(graph,'claim:1','Claim')
-        add_edge(graph,'paper:1','claim:1','SUPPORTS',evidence_ids=[eid],confidence='SUPPORTED')
+        add_edge(graph,'paper:1','claim:1','SUPPORTS',evidence_ids=[eid],confidence='SUPPORTED',
+                 anchors={eid:{'start_line':1,'end_line':1,'quote':'claim','relation':'SUPPORTS'}})
         register_graph(project,graph)
         record_run(project,'sol_direct','case-1',{'accuracy':0.5},cost=2,actor='Sol')
         dossier=root/'dossier'; export_dossier(project,dossier)
         self.assertTrue((dossier/'knowledge_graph.json').is_file())
         self.assertTrue((dossier/'evaluation_report.json').is_file())
         self.assertEqual(validate_dossier(dossier)['status'],'PASS')
+
+    def test_manifest_hash_is_required_for_every_payload(self):
+        root=Path(tempfile.mkdtemp()); project=Project.create(root/'project','test'); dossier=root/'dossier'
+        export_dossier(project,dossier)
+        manifest=json.loads((dossier/'discovery_manifest.json').read_text(encoding='utf-8'))
+        manifest['files'].pop('hypotheses.json')
+        (dossier/'discovery_manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
+        result=validate_dossier(dossier)
+        self.assertEqual(result['status'],'FAIL')
+        self.assertIn('Missing manifest hash hypotheses.json',result['findings'])
+
+    def test_incomplete_evidence_cannot_validate(self):
+        root=Path(tempfile.mkdtemp()); project=Project.create(root/'project','test')
+        source=root/'source.txt'; source.write_text('source evidence\n',encoding='utf-8')
+        project.add_evidence(source,'synthetic source','text')
+        dossier=root/'dossier'; export_dossier(project,dossier)
+        index=json.loads((dossier/'evidence_index.json').read_text(encoding='utf-8'))
+        item=next(iter(index.values())); item['portable']=False; item['portability_status']='INCOMPLETE'
+        (dossier/'evidence_index.json').write_text(json.dumps(index),encoding='utf-8')
+        manifest=json.loads((dossier/'discovery_manifest.json').read_text(encoding='utf-8'))
+        manifest['files']['evidence_index.json']=hashlib.sha256((dossier/'evidence_index.json').read_bytes()).hexdigest()
+        (dossier/'discovery_manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
+        result=validate_dossier(dossier)
+        self.assertEqual(result['status'],'FAIL')
+        self.assertTrue(any(item.startswith('Incomplete evidence') for item in result['findings']))
 
 if __name__=='__main__': unittest.main()
