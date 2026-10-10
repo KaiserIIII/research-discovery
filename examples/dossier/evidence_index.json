@@ -6,7 +6,10 @@
     "kind": "data",
     "origin": "synthetic fixture included for documentation",
     "path": "evidence/3004518cc5b70668ee4da0845ea6879abc31e9b1e124fd61eea07288c64c9493.csv",
-    "sha256": "3004518cc5b70668ee4da0845ea6879abc31e9b1e124fd61eea07288c64c9493"
+    "sha256": "3004518cc5b70668ee4da0845ea6879abc31e9b1e124fd61eea07288c64c9493",
+    "portable": true,
+    "portable_path": "evidence/3004518cc5b70668ee4da0845ea6879abc31e9b1e124fd61eea07288c64c9493.csv",
+    "portability_status": "EMBEDDED_CONTENT_ADDRESSED"
   },
   "E-2c5eb33b5bfb2fa68b7b": {
     "acquired_utc": "2026-10-09T14:46:49.150647Z",
@@ -15,6 +18,9 @@
     "kind": "pilot_output",
     "origin": "pilot stdout",
     "path": "evidence/2c5eb33b5bfb2fa68b7b18a582593c208c6e1a99f9ff8791192cccb38c854bde.log",
-    "sha256": "2c5eb33b5bfb2fa68b7b18a582593c208c6e1a99f9ff8791192cccb38c854bde"
+    "sha256": "2c5eb33b5bfb2fa68b7b18a582593c208c6e1a99f9ff8791192cccb38c854bde",
+    "portable": true,
+    "portable_path": "evidence/2c5eb33b5bfb2fa68b7b18a582593c208c6e1a99f9ff8791192cccb38c854bde.log",
+    "portability_status": "EMBEDDED_CONTENT_ADDRESSED"
   }
 }

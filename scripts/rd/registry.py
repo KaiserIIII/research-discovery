@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .core import DiscoveryError
+from .plugins import discover_plugins
 
 
 FRONT_MATTER = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
@@ -19,6 +20,7 @@ ADAPTERS = {
     "anchor": {"script": "scripts/evidence_anchor.py", "fixed": ["validate"]},
     "literature": {"script": "scripts/literature_runtime.py", "fixed": ["audit"]},
     "planner": {"script": "scripts/experiment_planner.py", "fixed": ["plan"]},
+    "research_state": {"script": "scripts/research_state.py", "fixed": ["--version"]},
 }
 
 
@@ -107,6 +109,40 @@ def discover(roots: list[Path]) -> dict[str, Any]:
     return {"capabilities": capabilities, "conflicts": conflicts, "errors": errors}
 
 
+def runtime_capabilities() -> dict[str, Any]:
+    """Describe capabilities whose status is grounded in this runtime.
+
+    This small registry keeps executable built-ins separate from SKILL.md
+    workflows and marks V4.1 adapters as verified only after an invocation.
+    """
+    plugins = discover_plugins()
+    return {
+        "capabilities": [
+            {"id": item["id"], "availability": item["availability"],
+             "interface": "builtin_plugin", "version": item["version"],
+             "limitations": item["limitations"]}
+            for item in plugins.values()
+        ] + [
+            {"id": "v41_read_only_adapters", "availability": "AVAILABLE_UNTESTED",
+             "interface": "locked_cli", "source": "assets/adapters.lock.json",
+             "limitations": ["Status becomes VERIFIED_EXECUTABLE only after a successful probe."]},
+            {"id": "storm", "availability": "DESIGN_REFERENCE", "interface": "external_project",
+             "limitations": ["No code, dependency or runtime is included."]},
+            {"id": "ai_scientist", "availability": "DESIGN_REFERENCE", "interface": "external_project",
+             "limitations": ["Upstream custom license and no runtime integration in this release."]},
+            {"id": "botorch", "availability": "DESIGN_REFERENCE", "interface": "external_project",
+             "limitations": ["No third-party dependency is installed or executed."]},
+        ],
+        "status_definitions": {
+            "VERIFIED_EXECUTABLE": "Executed in this runtime with a retained output.",
+            "HOST_WORKFLOW": "Requires the host model or operator to execute.",
+            "AVAILABLE_UNTESTED": "Located and contract-checked but not executed.",
+            "UNAVAILABLE": "Required dependency or service is unavailable.",
+            "DESIGN_REFERENCE": "Used for design ideas only; no code integrated.",
+        },
+    }
+
+
 def _resolve_script(skill_path: Path, relative: str) -> tuple[Path, Path]:
     candidate = Path(skill_path)
     root = candidate if candidate.is_dir() else candidate.parent
@@ -174,9 +210,18 @@ def _safe_args(adapter: str, args: list[str], output_dir: Path) -> list[str]:
     if adapter == "planner":
         if len(args) not in {1, 3} or args[0].startswith("-") or (len(args) == 3 and args[1] != "--output"):
             raise DiscoveryError("planner requires OPTIONS FILE with optional --output FILE")
-        if len(args) == 3 and not (Path(args[2]) if Path(args[2]).is_absolute() else output_dir / args[2]).resolve().is_relative_to(output_dir.resolve()):
-            raise DiscoveryError("planner output must remain under output_dir")
+        if len(args) == 3:
+            # Normalize both Windows and POSIX separators before resolving so
+            # a Windows-style traversal is rejected on Linux CI as well.
+            raw = args[2].replace("\\", "/")
+            candidate = Path(raw) if Path(raw).is_absolute() else output_dir / raw
+            if not candidate.resolve().is_relative_to(output_dir.resolve()):
+                raise DiscoveryError("planner output must remain under output_dir")
         return ["plan", *args]
+    if adapter == "research_state":
+        if args:
+            raise DiscoveryError("research_state admission probe takes no arguments")
+        return ["--version"]
     raise DiscoveryError(f"Unknown V4.1 adapter: {adapter}")
 
 

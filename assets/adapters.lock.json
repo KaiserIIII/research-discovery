@@ -6,6 +6,7 @@
     "inventory": {"script": "scripts/skill_router.py", "sha256": "d6e5f9455a90f08e600054d7aa14f9a4b3ecc17d5e4fdca6b77104e37ff0c714"},
     "anchor": {"script": "scripts/evidence_anchor.py", "sha256": "56529886e7f1b8c21cbc11aead419ef92a3afa2134a5d24df3b40708992a0ca6"},
     "literature": {"script": "scripts/literature_runtime.py", "sha256": "fb6f3ba3c88b392a60a7d949ebd3efc64efb625221b576df7412b3f27d9cc1b2"},
-    "planner": {"script": "scripts/experiment_planner.py", "sha256": "5634b6d654461d77358b19cd9dd583615fe5021017674ebdc8cd4aef8f5227ad"}
+    "planner": {"script": "scripts/experiment_planner.py", "sha256": "5634b6d654461d77358b19cd9dd583615fe5021017674ebdc8cd4aef8f5227ad"},
+    "research_state": {"script": "scripts/research_state.py", "sha256": "ef159b4500f7b4c1b37ace923b5e50edc5a2f9dba92e33626b9451621d2f0c13"}
   }
 }

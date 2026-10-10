@@ -95,6 +95,26 @@ def _tree_size(path):
     return total
 
 
+def _tree_snapshot(path):
+    """Capture file sizes before a run so pre-existing bytes are not charged twice."""
+    snapshot = {}
+    try:
+        for item in Path(path).rglob("*"):
+            if item.is_file():
+                try: snapshot[str(item.resolve())] = item.stat().st_size
+                except OSError: pass
+    except OSError: pass
+    return snapshot
+
+
+def _tree_delta(path, baseline):
+    total = 0
+    current = _tree_snapshot(path)
+    for name, size in current.items():
+        total += max(0, size - baseline.get(name, 0))
+    return total
+
+
 def _posix_usage(pid):
     """Read Linux child CPU/RSS counters without adding psutil."""
     if os.name == "nt": return 0.0, 0
@@ -215,7 +235,7 @@ def run_bounded(argv, cwd, limits):
         raise DiscoveryError("argv must be a nonempty list of strings")
     cwd = Path(cwd).resolve(); cwd.mkdir(parents=True, exist_ok=True)
     cap = int(limits["disk_mb"] * 1024 * 1024)
-    before = _tree_size(cwd)
+    baseline = _tree_snapshot(cwd)
     stdout_path, stderr_path = cwd / "stdout.log", cwd / "stderr.log"
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     preexec = None
@@ -250,7 +270,7 @@ def run_bounded(argv, cwd, limits):
     reason = None
     while proc.poll() is None:
         elapsed = time.monotonic() - start
-        size = before + _tree_size(cwd)
+        size = _tree_delta(cwd, baseline)
         if state["disk"] or size > cap:
             reason = "DISK_LIMIT"
         elif os.name == "nt":
@@ -291,6 +311,15 @@ def run_bounded(argv, cwd, limits):
         # their return code and no stop reason.
         if peak_memory >= limits["memory_mb"] * 1024 * 1024: reason = "MEMORY_LIMIT"
         elif peak_cpu >= limits["cpu_seconds"]: reason = "CPU_LIMIT"
+    if reason is None and proc.returncode not in (0, None):
+        # On POSIX, an address-space rlimit may make Python raise MemoryError
+        # and exit before /proc can report a final RSS sample.
+        try:
+            diagnostic = stderr_path.read_text(encoding="utf-8", errors="replace").lower()
+            if "memoryerror" in diagnostic or "cannot allocate memory" in diagnostic:
+                reason = "MEMORY_LIMIT"
+        except OSError:
+            pass
     return {"returncode": proc.returncode, "stop_reason": reason,
             "elapsed_seconds": elapsed, "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path), "platform": platform.platform(),

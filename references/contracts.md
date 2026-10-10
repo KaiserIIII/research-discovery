@@ -22,3 +22,21 @@ Pilot registrations freeze the inputs, seed, primary observable, controls,
 predictions, stop rule, stage and limits. Every result includes status,
 interpretation and raw output/error evidence. `NEGATIVE`, `FAILED` and
 `INCONCLUSIVE` are first-class results.
+
+## Full-text claims
+
+`fulltext` evidence is acquired only through an allow-listed HTTPS source with
+an explicit lawful-access basis. A `literature_claim` event contains the source
+identifier, evidence ID, exact one-based line range, verbatim quote, source and
+region SHA-256, relation (`SUPPORTS`, `CONTRADICTS`, `LIMITS` or
+`OPEN_PROBLEM`) and an independent checker. A full-text download is never
+implied by a metadata record.
+
+## Non-CSV plugins
+
+Plugin protocols contain `id`, `plugin_id`, `stage=PILOT`, `inputs`, `limits`,
+`seed`, `stop_rule` and `expected_output`. Only IDs returned by
+`rd.plugins.discover_plugins()` can run. The V1.0.1 `text_delta` contract takes
+two text evidence IDs and emits line counts plus added, removed and common line
+counts. Registration freezes the protocol hash; execution retains stdout,
+stderr, failures and the bounded runtime metadata.

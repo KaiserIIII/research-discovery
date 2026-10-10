@@ -38,6 +38,15 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(result['stop_reason'], 'DISK_LIMIT')
         self.assertLessEqual(sum(p.stat().st_size for p in (self.root/'run').rglob('*') if p.is_file()), 104857)
 
+    def test_preexisting_workdir_bytes_are_not_counted_twice(self):
+        run_dir = self.root / 'baseline'
+        run_dir.mkdir()
+        (run_dir / 'baseline.bin').write_bytes(b'x' * 200_000)
+        result = run_bounded([sys.executable, '-I', '-c', "print('ok')"], run_dir,
+                             dict(seconds=2, memory_mb=128, disk_mb=0.3, cpu_seconds=1))
+        self.assertIsNone(result['stop_reason'])
+        self.assertEqual(result['returncode'], 0)
+
     def test_memory_limit_rejects_real_allocation(self):
         result = self.run_code('items=[]\nwhile True: items.append(bytearray(8*1024*1024))', memory_mb=96)
         self.assertEqual(result['stop_reason'], 'MEMORY_LIMIT')

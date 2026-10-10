@@ -181,6 +181,24 @@ def request_host(project,capability,inputs,role='Sol'):
     project.record('host_request',payload)
     return payload
 
+
+def request_hypotheses(project, domain, context, actor='Sol'):
+    """Request host-generated, competing questions with an explicit actor/model.
+
+    The host is a reasoning provider, so this function records the frozen input
+    and returns a request. It never fabricates candidate questions locally.
+    """
+    if not isinstance(domain, str) or not domain.strip():
+        raise DiscoveryError('Hypothesis domain must be nonempty')
+    if not isinstance(context, list):
+        raise DiscoveryError('Hypothesis context must be a list')
+    request = request_host(project, 'frontier-and-three-candidates',
+                           {'domain': domain, 'context': context}, actor)
+    request['actor'] = actor
+    request['output_contract'] = ('request_id,input_sha256,actor,model,findings,artifact_ids,'
+                                  'candidates[>=3 with distinct routes, rivals, falsifier]')
+    return request
+
 def receive_host(project,response):
     request=next((e['payload'] for e in project.events() if e['kind']=='host_request'
                   and e['payload']['request_id']==response.get('request_id')),None)
@@ -188,7 +206,27 @@ def receive_host(project,response):
     if any(e['kind']=='host_response' and e['payload']['request_id']==response['request_id'] for e in project.events()):
         raise DiscoveryError('Host request already received')
     for key in ('actor','model','findings','artifact_ids'):
-        if not response.get(key): raise DiscoveryError('Missing actual host record: '+key)
+        if key in {'actor','model'}:
+            if not isinstance(response.get(key), str) or not response[key].strip():
+                raise DiscoveryError('Missing actual host record: '+key)
+        elif not isinstance(response.get(key), list):
+            raise DiscoveryError('Missing actual host record: '+key)
     for eid in response['artifact_ids']: _evidence(project,eid)
+    request_capability = request.get('capability')
+    candidates = response.get('candidates')
+    if request_capability == 'frontier-and-three-candidates':
+        if not isinstance(candidates, list) or len(candidates) < 3:
+            raise DiscoveryError('Host must return at least three candidates')
+        validate_candidates(project, candidates, minimum=3)
+        # Require substantive route and increment diversity beyond duplicate wording.
+        if len({c['route'] for c in candidates}) < 3 or len({c['increment_kind'] for c in candidates}) < 3:
+            raise DiscoveryError('Host candidates are not materially distinct')
+        response = dict(response, candidates=deepcopy(candidates),
+                        candidate_status='HOST_GENERATED_REQUIRES_ADMISSION')
+        project.freeze('host_candidates', candidates)
+    elif candidates is not None:
+        raise DiscoveryError('Candidates are only valid for a hypothesis request')
     project.record('host_response',dict(**response,status='RECORDED_NOT_SCIENTIFICALLY_QUALIFIED'))
-    return dict(status='RECEIVED',independent_validation=False)
+    return dict(status='RECEIVED', independent_validation=False,
+                candidate_count=len(candidates) if isinstance(candidates, list) else 0,
+                scientific_status='HOST_GENERATED_REQUIRES_ADMISSION' if candidates is not None else 'RECORDED_NOT_SCIENTIFICALLY_QUALIFIED')
