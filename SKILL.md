@@ -5,7 +5,7 @@ metadata:
   short-description: Evidence-bound research discovery and pilots
 ---
 
-# Research Discovery V1.0
+# Research Discovery V1.0.1
 
 Run `python scripts/discovery.py --help` from this skill directory. This skill
 coordinates host capabilities and deterministic local records; it does not act
@@ -36,16 +36,24 @@ formal experiment system.
    requires it. Ask the host for Sol/Luna work with `host-request`; only an
    actual response with artifact IDs may be recorded, and it never qualifies
    itself as an independent checker.
-8. Export and validate the dossier. `handoff_to_v4_1.md` explicitly leaves
+8. For deep semantic work, use `hypotheses-request` and require an actual
+   host response with a request hash, actor/model, findings, artifact IDs and
+   at least three materially distinct candidates. A host response is recorded
+   as requiring admission; it is not an originality verdict.
+9. Full text may be retrieved only from the HTTPS allowlist with a recorded
+   lawful access basis. Verify load-bearing claims with exact line ranges and
+   an independent checker. Metadata and abstracts remain `METADATA_ONLY`.
+10. Export and validate the dossier. `handoff_to_v4_1.md` explicitly leaves
    scientific authority with V4.1; V4.1 must independently review novelty,
    feasibility, protocol, statistics, reproducibility and publication sufficiency.
 
 ## Safety and limits
 
-The bundled pilot runner only executes built-in CPU analysis or a separately
-audited adapter. It is bounded, not a security sandbox; it cannot promise OS,
-network or native-code isolation. Never run untrusted packages, use paid cloud
-resources, mutate V4.1, or mix discovery/pilot outputs into formal samples.
+The bundled pilot runner executes built-in CPU analysis and the audited
+non-CSV `text_delta` plugin. It is bounded, not a security sandbox; it cannot
+promise OS, network or native-code isolation. Never run untrusted packages,
+use paid cloud resources, mutate V4.1, or mix discovery/pilot outputs into
+formal samples.
 
 Read `references/contracts.md` for schemas and `references/ecosystem.md` for
 the actual adoption and rejection audit. Local private audit files stay outside

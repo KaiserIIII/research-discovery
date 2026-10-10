@@ -95,6 +95,26 @@ def _tree_size(path):
     return total
 
 
+def _tree_snapshot(path):
+    """Capture file sizes before a run so pre-existing bytes are not charged twice."""
+    snapshot = {}
+    try:
+        for item in Path(path).rglob("*"):
+            if item.is_file():
+                try: snapshot[str(item.resolve())] = item.stat().st_size
+                except OSError: pass
+    except OSError: pass
+    return snapshot
+
+
+def _tree_delta(path, baseline):
+    total = 0
+    current = _tree_snapshot(path)
+    for name, size in current.items():
+        total += max(0, size - baseline.get(name, 0))
+    return total
+
+
 def _posix_usage(pid):
     """Read Linux child CPU/RSS counters without adding psutil."""
     if os.name == "nt": return 0.0, 0
@@ -215,7 +235,7 @@ def run_bounded(argv, cwd, limits):
         raise DiscoveryError("argv must be a nonempty list of strings")
     cwd = Path(cwd).resolve(); cwd.mkdir(parents=True, exist_ok=True)
     cap = int(limits["disk_mb"] * 1024 * 1024)
-    before = _tree_size(cwd)
+    baseline = _tree_snapshot(cwd)
     stdout_path, stderr_path = cwd / "stdout.log", cwd / "stderr.log"
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     preexec = None
@@ -250,7 +270,7 @@ def run_bounded(argv, cwd, limits):
     reason = None
     while proc.poll() is None:
         elapsed = time.monotonic() - start
-        size = before + _tree_size(cwd)
+        size = _tree_delta(cwd, baseline)
         if state["disk"] or size > cap:
             reason = "DISK_LIMIT"
         elif os.name == "nt":

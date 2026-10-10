@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rd.core import DiscoveryError
-from rd.registry import discover, invoke_v41
+from rd.registry import discover, invoke_v41, runtime_capabilities
 
 
 class RegistryTests(unittest.TestCase):
@@ -78,6 +78,13 @@ class RegistryTests(unittest.TestCase):
         from rd.registry import _safe_args
         with self.assertRaises(DiscoveryError):
             _safe_args('planner', ['input.json', '--output', '..\\outside.json'], self.root / 'out')
+
+    def test_runtime_capabilities_distinguish_verified_and_design_only(self):
+        result = runtime_capabilities()
+        rows = {item['id']: item['availability'] for item in result['capabilities']}
+        self.assertEqual(rows['text_delta'], 'VERIFIED_EXECUTABLE')
+        self.assertEqual(rows['storm'], 'DESIGN_REFERENCE')
+        self.assertEqual(rows['v41_read_only_adapters'], 'AVAILABLE_UNTESTED')
 
 
 if __name__ == '__main__':

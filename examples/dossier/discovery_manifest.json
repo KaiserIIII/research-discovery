@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "skill_version": "1.0.0",
+  "skill_version": "1.0.1",
   "project_schema": "1.0",
   "exported_utc": "2026-10-09T14:46:48.887152Z",
   "domain": "synthetic software measurement",
@@ -19,10 +19,22 @@
     "prior_art_matrix.md": "8fe50ca176d5f33541f34f09a3ec82efbb1caf3458e33e442c5a8d60cbfa67f4",
     "pilot_protocol.json": "4a29136cf2beb34e4021909822b0392a76d40a786687327df81267a66e960fa7",
     "pilot_results.json": "c47f7e5c0a0e3b55e7b64e8f20a5c11471cf8968377ad4ffbc8f1dd975fb8e7c",
-    "evidence_index.json": "dcd63a145b8bac46509475d9e980a1c974a6e51e9847264dd9bbaf00f33f0df1",
+    "evidence_index.json": "6efcb30fbbd35a593074aa5a93613e4e147ff5d84ffe3205929eb1d53d8a5ea0",
     "rival_explanations.md": "f50a50cb5275e303afe97b9f99a294e01f3560bcd54c81d4e4d72ca6b0c1fcf2",
     "limitations.md": "ba768e418edf8c678442e250cde599a1aa9c46f9e832f2883c3be589c2d059d5",
     "discovery_dossier.md": "6677df94e8852c3963e75f5c1e463aa15fb72a2894a10e624244f66dc9dfe323",
     "handoff_to_v4_1.md": "c5cf3573ff05146779223aa67d4c2e2e059208f5496d7f191b4be9b0a63b4ae2"
-  }
+  },
+  "evidence_portability": [
+    {
+      "evidence_id": "E-3004518cc5b70668ee4d",
+      "portable": true,
+      "status": "EMBEDDED_CONTENT_ADDRESSED"
+    },
+    {
+      "evidence_id": "E-2c5eb33b5bfb2fa68b7b",
+      "portable": true,
+      "status": "EMBEDDED_CONTENT_ADDRESSED"
+    }
+  ]
 }

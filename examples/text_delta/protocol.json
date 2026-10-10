@@ -1,0 +1,18 @@
+{
+  "id": "text-delta-example",
+  "plugin_id": "text_delta",
+  "stage": "PILOT",
+  "inputs": {
+    "left": "E-<sha256-prefix>",
+    "right": "E-<sha256-prefix>"
+  },
+  "limits": {
+    "seconds": 5,
+    "memory_mb": 128,
+    "disk_mb": 2,
+    "cpu_seconds": 4
+  },
+  "seed": 1,
+  "stop_rule": "one bounded comparison",
+  "expected_output": "line_delta"
+}
