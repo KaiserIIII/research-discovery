@@ -1,0 +1,6 @@
+interface:
+  display_name: "Research Discovery"
+  short_description: "Evidence-bound research discovery and pilots"
+  default_prompt: "Use $research-discovery to explore and test competing research questions with traceable evidence."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,9 @@
+{
+  "claims": [
+    {"id":"study-a","phenomenon":"calibration drift","direction":1,"context":{"dataset":"synthetic-v1","metric":"mae"},"assumptions":["exchangeability"]},
+    {"id":"study-b","phenomenon":"calibration drift","direction":-1,"context":{"dataset":"synthetic-v2","metric":"mae"},"assumptions":["stationarity"]}
+  ],
+  "transfers": [{"method":"randomized masking","target":"calibration drift","basis":"exchangeability makes masked samples comparable","failure":"masking changes the missingness mechanism"}],
+  "anomalies": [{"observation":"error falls after a build change","alternative":"measurement pipeline changed"}],
+  "mechanisms": [{"observation":"drift follows batch order","rivals":["data ordering","model adaptation"]}]
+}
