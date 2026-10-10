@@ -6,6 +6,27 @@ explanations, preregistered bounded pilots, negative results and a portable
 handoff to CS Nature Paper V4.1. A search never proves originality, and a pilot
 never becomes a formal experiment by itself.
 
+```mermaid
+flowchart LR
+    R[Researcher / host model] --> D[Research Discovery control plane]
+    D --> L[Public metadata + lawful full text]
+    D --> H[Competing hypotheses and adversarial review]
+    D --> P[Bounded pilot plugins]
+    L --> E[Hash-chained evidence ledger]
+    H --> E
+    P --> E
+    E --> X[Portable Discovery Dossier]
+    X --> V[Locked read-only V4.1 adapters]
+    V --> G{V4.1 scientific admission}
+    G --> A[Accept]
+    G --> N[Reject]
+    G --> Q[Need evidence]
+```
+
+The control plane preserves provenance, budgets, failures and negative results.
+The dossier can be moved and independently verified. V4.1 retains authority
+over novelty, feasibility, protocol, statistics and publication sufficiency.
+
 ```powershell
 cd C:\Users\17271\.codex\skills\research-discovery
 python scripts/discovery.py doctor
